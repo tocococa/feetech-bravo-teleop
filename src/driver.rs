@@ -1,5 +1,5 @@
 use crate::{
-    commands::{IntoInstructionPacket, ReadCommand, WriteCommand},
+    commands::{IntoInstructionPacket, ReadCommand},
     packet_handler::PacketHandler,
 };
 
@@ -85,9 +85,5 @@ impl Driver {
 
     pub fn read(&mut self, motor_id: u8, command: ReadCommand) -> Option<u16> {
         self.act::<ReadCommand>(motor_id, command)
-    }
-
-    pub fn write(&mut self, motor_id: u8, command: WriteCommand) -> Option<u16> {
-        self.act::<WriteCommand>(motor_id, command)
     }
 }
