@@ -29,43 +29,43 @@ Bravo 7 Denavit-Hartenberg params:
 theta0: 
   d: 0.1074
   theta: theta0 + pi
-  r: 0.0460
+  a: 0.0460
   alpha: +pi/2
   
 theta1: 
   d: 0
   theta: theta1 - pi/2 + theta_a
-  r: 0.2936
+  a: 0.2936
   alpha: 0
   
 theta2: 
   d: 0
   theta: theta2 - pi/2 - theta_a
-  r: 0.0408
+  a: 0.0408
   alpha: -pi/2
   
 theta3: 
   d: -0.1600
   theta: theta3
-  r: 0.0408
+  a: 0.0408
   alpha: -pi/2
   
 theta4: 
   d: 0
   theta: theta4
-  r: 0.0408
+  a: 0.0408
   alpha: -pi/2
   
 theta5: 
   d: -0.2235
   theta: theta5
-  r: 0
+  a: 0
   alpha: +pi/2
   
 end_effector:
   d: 0
   theta: -pi/2 (fixed)
-  r: 0.1200
+  a: 0.1200
   alpha: 0
 ```
 
@@ -75,43 +75,43 @@ SO-100 classic Denavit-Hartenberg params (classic DH):
 # theta{i}:
 #   d: d_i (m)
 #   theta: theta_i (+ offset)
-#   r: a_i (m)
+#   a: a_i (m)
 #   alpha: alpha_i (rad)
 
 theta0:
   d: 0.0165
   theta: theta0
-  r: 0.0306
+  a: 0.0306
   alpha: 1.5708
 
 theta1:
   d: 0.1025
   theta: theta1 - 1.8
-  r: 0.1160
+  a: 0.1160
   alpha: 0.0
 
 theta2:
   d: 0.0
   theta: theta2 + 1.571
-  r: 0.1350
+  a: 0.1350
   alpha: 0.0
 
 theta3:
   d: 0.0
   theta: theta3 - 1.0
-  r: 0.0
+  a: 0.0
   alpha: 1.5708
 
 theta4:
   d: 0.0
   theta: theta4 + 1.571
-  r: 0.0202
+  a: 0.0202
   alpha: 1.5708
 
 end_effector:
   d: 0.0244
   theta: -pi/2 (fixed)
-  r: 0.0
+  a: 0.0
   alpha: 0.0
 ```
 
