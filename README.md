@@ -117,4 +117,4 @@ end_effector:
 
 Notes:
 - These classic DH parameters were derived from the joint origin and axis data you supplied by computing the common normals and twists between successive joint axes (r_i, alpha_i) and the offsets (theta shifts) needed so that theta_i=0 matches the provided RPY orientation.
-- Units: distances in meters, angles in radians. Validate against URDF/CAD and a known forward-kinematics pose before using in control.
+- Units: distances in meters, angles in radians.
