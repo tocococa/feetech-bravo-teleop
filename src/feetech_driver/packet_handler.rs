@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::{
+use super::{
     packets::{InstructionPacket, StatusPacket},
     serial::Serial,
 };

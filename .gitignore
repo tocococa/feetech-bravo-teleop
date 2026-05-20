@@ -1,3 +1,5 @@
 /target
 **.lock
 **.json
+**.log
+**.swp

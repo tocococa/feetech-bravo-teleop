@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
-use crate::instruction::Instruction;
-use crate::memory_location::{MemoryLocation, MemoryValue};
-use crate::utils;
+use super::instruction::Instruction;
+use super::memory_location::{MemoryLocation, MemoryValue};
+use super::utils;
 
 #[derive(Debug)]
 pub struct StatusPacket {

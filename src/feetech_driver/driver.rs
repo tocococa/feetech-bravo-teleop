@@ -1,4 +1,4 @@
-use crate::{
+use super::{
     commands::{IntoInstructionPacket, ReadCommand},
     packet_handler::PacketHandler,
 };
@@ -16,7 +16,7 @@ impl Driver {
     ///
     /// # Example
     /// ```no_run
-    /// use feetech_servo_rs::Driver;
+    /// use feetech_bravo_teleop::Driver;
     ///
     /// let driver = Driver::new("/dev/ttyUSB0");
     /// ```
@@ -40,7 +40,7 @@ impl Driver {
     ///
     /// # Example
     /// ```no_run
-    /// use feetech_servo_rs::Driver;
+    /// use feetech_bravo_teleop::Driver;
     ///
     /// let driver = Driver::with_baud_rate("/dev/ttyUSB0", 57600);
     /// ```
@@ -65,18 +65,16 @@ impl Driver {
     ///
     /// # Example
     /// ```no_run
-    /// use feetech_servo_rs::Driver;
-    /// use feetech_servo_rs::{ReadCommand::CurrentPosition, WriteCommand::TargetPosition};
+    /// use feetech_bravo_teleop::{Driver, ReadCommand::CurrentPosition};
     ///
     /// let motor_id = 1u8;
     /// let mut driver = Driver::new("/dev/ttyUSB0");
     /// let current_position: u16 = driver.read(motor_id, CurrentPosition).unwrap();
-    /// driver.write(motor_id, TargetPosition(current_position + 5u16)).unwrap();
     /// ```
     fn act<T: IntoInstructionPacket>(&mut self, motor_id: u8, command: T) -> Option<u16> {
         let packet = command.to_instruction_packet(motor_id);
         let status_packet = match self.packet_handler.tx_rx_packet(packet).ok()? {
-            crate::packet_handler::RxStatus::Success(Some(packet)) => packet,
+            super::packet_handler::RxStatus::Success(Some(packet)) => packet,
             // TODO: Handle all other cases!
             _ => return None,
         };

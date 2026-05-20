@@ -1,8 +1,8 @@
-use crate::memory_location::{
-    MemoryValue, ACCELERATION, CURRENT_POSITION, ID, TARGET_POSITION, TEMPERATURE, TORQUE_SWITCH,
+use super::memory_location::{
+    ACCELERATION, CURRENT_POSITION, ID, TEMPERATURE,
 };
 
-use crate::packets::InstructionPacket;
+use super::packets::InstructionPacket;
 
 pub trait IntoInstructionPacket {
     fn to_instruction_packet(&self, motor_id: u8) -> InstructionPacket;
