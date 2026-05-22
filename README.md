@@ -78,35 +78,35 @@ SO-100 classic Denavit-Hartenberg params (classic DH):
 #   a: a_i (m)
 #   alpha: alpha_i (rad)
 
-theta0:
+theta0: # shoulder_pan
   d: 0.0165
   theta: theta0
-  a: 0.0306
-  alpha: 1.5708
+  a: 0.0452
+  alpha: +pi/2
 
-theta1:
+theta1: # shoulder_lift
   d: 0.1025
   theta: theta1 - 1.8
   a: 0.1160
   alpha: 0.0
 
-theta2:
+theta2: # elbow_flex
   d: 0.0
   theta: theta2 + 1.571
   a: 0.1350
   alpha: 0.0
 
-theta3:
+theta3: # wrist_flex
   d: 0.0
   theta: theta3 - 1.0
   a: 0.0
-  alpha: 1.5708
+  alpha: +pi/2
 
-theta4:
+theta4: # wrist_roll
   d: 0.0
   theta: theta4 + 1.571
   a: 0.0202
-  alpha: 1.5708
+  alpha: +pi/2
 
 end_effector:
   d: 0.0244

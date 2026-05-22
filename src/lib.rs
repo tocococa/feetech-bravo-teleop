@@ -5,4 +5,4 @@ pub use feetech_driver::commands::ReadCommand;
 pub use feetech_driver::utils;
 
 mod kinematics;
-pub use kinematics::forward;
+pub use kinematics::forward::So100FwdKinematics;

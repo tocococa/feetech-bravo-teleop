@@ -5,13 +5,9 @@ use std::sync::atomic::AtomicBool;
 use clap::Parser;
 use serde::Deserialize;
 
-use feetech_bravo_teleop::{
-    Driver,
-    ReadCommand::CurrentPosition,
-};
+use feetech_bravo_teleop::{Driver, ReadCommand::CurrentPosition, So100FwdKinematics};
 
 use feetech_bravo_teleop::utils::step_to_rads;
-
 
 #[derive(Parser, Debug)]
 #[command(
@@ -56,8 +52,10 @@ fn main() {
     let servo_calib: HashMap<String, JointCalibration> =
         serde_json::from_str(&json).expect("Failed to parse calibration file");
 
-    for (joint_name, joint_info) in &servo_calib {
-        println!("Joint: {}, Info: {:?}", joint_name, joint_info);
+    if cli.debug {
+        for (joint_name, joint_info) in &servo_calib {
+            println!("Joint: {}, Info: {:?}", joint_name, joint_info);
+        }
     }
 
     let mut servo_states: HashMap<u8, JointState> = servo_calib
@@ -73,7 +71,9 @@ fn main() {
             )
         })
         .collect();
-    println!("{:?}", servo_states);
+    if cli.debug {
+        println!("Servo states:\n{:?}", servo_states);
+    }
 
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = Arc::clone(&running);
@@ -85,10 +85,11 @@ fn main() {
     let mut servo_positions: Vec<u16> = [0; 6].to_vec();
     let mut teleop_input = Driver::new(&cli.port);
 
-
+    let mut recenter = true;
+    let mut fwd_kinematics = So100FwdKinematics::new();
     while running.load(std::sync::atomic::Ordering::SeqCst) {
         for motor_id in 1u8..=6u8 {
-            servo_positions[(motor_id - 1) as usize] = 
+            servo_positions[(motor_id - 1) as usize] =
                 teleop_input.read(motor_id, CurrentPosition).unwrap();
             if let Some(servo_info) = servo_states.get_mut(&motor_id) {
                 servo_info.current_step = servo_positions[(motor_id - 1) as usize];
@@ -96,13 +97,21 @@ fn main() {
                     servo_info.current_step as i32,
                     servo_info.calibration.homing_offset,
                 );
+                fwd_kinematics
+                    .update_single_theta((motor_id - 1) as usize, servo_info.current_rads);
             }
         }
+        fwd_kinematics.update_pose_twist();
+
+        if recenter {
+            recenter = false; // this will later depend on keyboard input
+        }
+
         if cli.debug {
             println!("Current Servo Angles (rads):");
             for (servo_id, joint_info) in &servo_states {
                 println!("{}: {:.4}", servo_id, joint_info.current_rads);
             }
-        }    
+        }
     }
 }
