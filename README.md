@@ -17,10 +17,11 @@ The driver will publish velocity commands as `/bravo_7_teleop/joint_velocity_com
 - Rust toolchain (stable): `$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
 - ROS2 (Humble or later): Follow the official ROS2 installation guide for your platform: https://docs.ros.org/en/humble/Installation.html
 - libudev (for Rust serial library): `$ sudo apt update && sudo apt install libudev-dev pkg-config`
+- LeRobot drivers, to generate the calibration file, or go with the default calibration file provided in this repo.
 
 ## References
 
-The low-level serial driver for the Feetech board is based on the [feetech-servo-rs](https://github.com/proteusvacuum/feetech-servo-rs/tree/main) library by the Recurse Center. It has had some of its functionality sifted, as this module only needs to read the state of the SO-100 and then map that radians.
+The serial driver for the Feetech servos is based on the [feetech-servo-rs](https://github.com/proteusvacuum/feetech-servo-rs/tree/main) library by the Recurse Center. It has had some of its functionality sifted, as this module only needs to read the state of the SO-100 and then map that to joint angles.
 
 ### Extras
 
