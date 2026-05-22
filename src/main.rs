@@ -98,12 +98,13 @@ fn main() {
                     servo_info.calibration.homing_offset,
                 );
                 fwd_kinematics
-                    .update_single_theta((motor_id - 1) as usize, servo_info.current_rads);
+                    .update_theta((motor_id - 1) as usize, servo_info.current_rads);
             }
         }
         fwd_kinematics.update_pose_twist();
 
         if recenter {
+            fwd_kinematics.re_center_ref();
             recenter = false; // this will later depend on keyboard input
         }
 
@@ -112,6 +113,12 @@ fn main() {
             for (servo_id, joint_info) in &servo_states {
                 println!("{}: {:.4}", servo_id, joint_info.current_rads);
             }
+            let ee_pos = fwd_kinematics.get_ee_position();
+            println!("Current end effector position:");
+            println!("x: {}, y: {}, z: {}", ee_pos[0], ee_pos[1], ee_pos[2]);
+            let ee_quat = fwd_kinematics.get_ee_rotation();
+            println!("Current end effector rotation (quaternion):");
+            println!("w: {}, x: {}, y: {}, z: {}", ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]);
         }
     }
 }

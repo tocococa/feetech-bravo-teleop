@@ -36,6 +36,9 @@ impl Mat3 {
         }
         Mat3::new(r)
     }
+    pub fn clone(&self) -> Self {
+        Mat3::new(self.data)
+    }
 }
 
 struct DHParams {
@@ -60,6 +63,8 @@ pub struct So100FwdKinematics {
     joint_thetas: Vec<f32>,
     ee_rot: Mat3,
     ee_position: Vec<f32>,
+    ee_rot_ref: Mat3,
+    ee_pos_ref: Vec<f32>,
     params: DHParams,
 }
 
@@ -71,16 +76,61 @@ impl So100FwdKinematics {
             joint_thetas: vec![0.0; SERVO_NUM],
             ee_rot: Mat3::new([[0.0; 3]; 3]),
             ee_position: Vec::with_capacity(3),
+            ee_rot_ref: Mat3::new([[0.0; 3]; 3]),
+            ee_pos_ref: vec![0.0; 3],
             params: DHParams::default(),
         }
     }
 
-    // pub fn update_vec_theta(&mut self, joint_thetas: Vec<f32>) {
-    //     assert_eq!(joint_thetas.len(), SERVO_NUM);
-    //     self.joint_thetas = joint_thetas;
-    // }
+    pub fn get_ee_position(&self) -> Vec<f32> {
+        let mut pos = Vec::with_capacity(3);
+        for i in 0..3 {
+            pos.push(self.ee_position[i] - self.ee_pos_ref[i]);
+        }
+        pos
+    }
 
-    pub fn update_single_theta(&mut self, joint_id: usize, joint_theta: f32) {
+    pub fn get_ee_rotation(&self) -> Vec<f32> {
+        let r_rel = self.ee_rot.transpose().mul(&self.ee_rot_ref);
+        // conver rotation to quaternion
+        let trace = r_rel.data[0][0] + r_rel.data[1][1] + r_rel.data[2][2];
+        let mut q = [0.0; 4];
+        if trace > 0.0 {
+            let s = 0.5 / (trace + 1.0).sqrt();
+            q[0] = 0.25 / s;
+            q[1] = (r_rel.data[1][2] - r_rel.data[2][1]) * s;
+            q[2] = (r_rel.data[2][0] - r_rel.data[0][2]) * s;
+            q[3] = (r_rel.data[0][1] - r_rel.data[1][0]) * s;
+        } else {
+            if r_rel.data[0][0] > r_rel.data[1][1] && r_rel.data[0][0] > r_rel.data[2][2] {
+                let s = 2.0 * (1.0 + r_rel.data[0][0] - r_rel.data[1][1] - r_rel.data[2][2]).sqrt();
+                q[0] = (r_rel.data[1][2] - r_rel.data[2][1]) / s;
+                q[1] = 0.25 * s;
+                q[2] = (r_rel.data[1][0] + r_rel.data[0][1]) / s;
+                q[3] = (r_rel.data[2][0] + r_rel.data[0][2]) / s;
+            } else if r_rel.data[1][1] > r_rel.data[2][2] {
+                let s = 2.0 * (1.0 + r_rel.data[1][1] - r_rel.data[0][0] - r_rel.data[2][2]).sqrt();
+                q[0] = (r_rel.data[2][0] - r_rel.data[0][2]) / s;
+                q[1] = (r_rel.data [1][0] + r_rel.data[0][1]) / s;
+                q[2] = 0.25 * s;
+                q[3] = (r_rel.data[2][1] + r_rel.data[1][2]) / s;
+            } else {
+                let s = 2.0 * (1.0 + r_rel.data[2][2] - r_rel.data[0][0] - r_rel.data[1][1]).sqrt();
+                q[0] = (r_rel.data[0][1] - r_rel.data[1][0]) / s;
+                q[1] = (r_rel.data[2][0] + r_rel.data[0][2]) / s;
+                q[2] = (r_rel.data[2][1] + r_rel.data[1][2]) / s;
+                q[3] = 0.25 * s;
+            }
+        }
+        q.to_vec()
+    }
+
+    pub fn re_center_ref(&mut self) {
+        self.ee_rot_ref = self.ee_rot.clone();
+        self.ee_pos_ref = self.ee_position.clone();
+    }
+
+    pub fn update_theta(&mut self, joint_id: usize, joint_theta: f32) {
         self.joint_thetas[joint_id] = joint_theta;
     }
 
