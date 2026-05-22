@@ -1,4 +1,4 @@
-struct Bravo7InvKinematics {
+pub struct Bravo7InvKinematics {
     
 }
 
