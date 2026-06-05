@@ -40,6 +40,9 @@ impl Mat3 {
     pub fn clone(&self) -> Self {
         Mat3::new(self.data)
     }
+    pub fn is_empty(&self) -> bool {
+        self.data.iter().all(|row| row.iter().all(|&x| x == 0.0))
+    }
 }
 
 struct DHParams {
@@ -73,6 +76,8 @@ fn quat_multiply(a: &[f32], b: &[f32]) -> [f32; 4] {
     ]
 }
 
+type Quaternion = Vec<f32>;
+
 pub struct So100FwdKinematics {
     joint_thetas: Vec<f32>,
     ee_rot: Mat3,
@@ -81,7 +86,7 @@ pub struct So100FwdKinematics {
     ee_pos_ref: Vec<f32>,
     params: DHParams,
     last_update: Instant,
-    ee_rot_vel: Vec<f32>,
+    ee_rot_vel: Quaternion,
     ee_pos_vel: Vec<f32>,
 }
 
@@ -159,6 +164,9 @@ impl So100FwdKinematics {
 
     fn compute_ee_velocities(&mut self, new_pos: Vec<f32>, new_quat: Vec<f32>) {
         let time_delta = self.last_update.elapsed().as_secs() as f32;
+        if self.ee_position.is_empty() || self.ee_rot.is_empty() {
+            return;
+        }
         let x_vel = (new_pos[0] - self.ee_position[0]) / time_delta;
         let y_vel = (new_pos[1] - self.ee_position[1]) / time_delta;
         let z_vel = (new_pos[2] - self.ee_position[2]) / time_delta;
@@ -266,7 +274,10 @@ impl So100FwdKinematics {
         let r = Mat3::new([[r11, r12, r13], [r21, r22, r23], [r31, r32, r33]]);
 
         let quat = self.get_ee_rotation(r.clone());
-        self.compute_ee_velocities(pos.clone(), quat);
+        if !pos.is_empty() && !quat.is_empty() {
+            self.compute_ee_velocities(pos.clone(), quat);
+        }
+        
         
         self.ee_position = pos;
         self.ee_rot = r;

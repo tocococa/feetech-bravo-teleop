@@ -4,10 +4,13 @@ pub struct Bravo7InvKinematics {
     
 }
 
+type Quaternion = Vec<f32>;
+type XYZ = Vec<f32>;
+
 #[derive(Debug, Deserialize)]
 pub struct BravoTwist {
-    pose: Vec<f32>,
-    quat: Vec<f32>,
+    pose: XYZ,
+    quat: Quaternion,
 }
 
 impl Bravo7InvKinematics {
