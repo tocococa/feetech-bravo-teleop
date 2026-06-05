@@ -1,4 +1,5 @@
 use std::f32::consts::PI;
+use std::time::{Instant};
 
 // as of May 2026, RFC #3681 "default_field_values" does not
 // allow for default values for vectors, so we still need to use imp::Default
@@ -59,6 +60,19 @@ impl Default for DHParams {
     }
 }
 
+fn quat_conjugate(q: &[f32]) -> [f32; 4] {
+    [q[0], -q[1], -q[2], -q[3]]
+}
+
+fn quat_multiply(a: &[f32], b: &[f32]) -> [f32; 4] {
+    [
+        a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+        a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+        a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+        a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+    ]
+}
+
 pub struct So100FwdKinematics {
     joint_thetas: Vec<f32>,
     ee_rot: Mat3,
@@ -66,6 +80,9 @@ pub struct So100FwdKinematics {
     ee_rot_ref: Mat3,
     ee_pos_ref: Vec<f32>,
     params: DHParams,
+    last_update: Instant,
+    ee_rot_vel: Vec<f32>,
+    ee_pos_vel: Vec<f32>,
 }
 
 const SERVO_NUM: usize = 6;
@@ -79,6 +96,9 @@ impl So100FwdKinematics {
             ee_rot_ref: Mat3::new([[0.0; 3]; 3]),
             ee_pos_ref: vec![0.0; 3],
             params: DHParams::default(),
+            ee_rot_vel: Vec::with_capacity(4),
+            ee_pos_vel: Vec::with_capacity(3),
+            last_update: Instant::now()
         }
     }
 
@@ -90,9 +110,9 @@ impl So100FwdKinematics {
         pos
     }
 
-    pub fn get_ee_rotation(&self) -> Vec<f32> {
-        let r_rel = self.ee_rot.transpose().mul(&self.ee_rot_ref);
-        // conver rotation to quaternion
+    fn get_ee_rotation(&self, rot: Mat3) -> Vec<f32> {
+        let r_rel = rot.transpose().mul(&self.ee_rot_ref);
+        // convert rotation to quaternion
         let trace = r_rel.data[0][0] + r_rel.data[1][1] + r_rel.data[2][2];
         let mut q = [0.0; 4];
         if trace > 0.0 {
@@ -128,10 +148,57 @@ impl So100FwdKinematics {
     pub fn re_center_ref(&mut self) {
         self.ee_rot_ref = self.ee_rot.clone();
         self.ee_pos_ref = self.ee_position.clone();
+        self.ee_rot_vel.clear();
+        self.ee_pos_vel.clear();
+        self.last_update = Instant::now();
     }
 
     pub fn update_theta(&mut self, joint_id: usize, joint_theta: f32) {
         self.joint_thetas[joint_id] = joint_theta;
+    }
+
+    fn compute_ee_velocities(&mut self, new_pos: Vec<f32>, new_quat: Vec<f32>) {
+        let time_delta = self.last_update.elapsed().as_secs() as f32;
+        let x_vel = (new_pos[0] - self.ee_position[0]) / time_delta;
+        let y_vel = (new_pos[1] - self.ee_position[1]) / time_delta;
+        let z_vel = (new_pos[2] - self.ee_position[2]) / time_delta;
+        self.ee_pos_vel = vec![x_vel, y_vel, z_vel];
+
+        let q_rel = quat_multiply(&new_quat, &quat_conjugate(&self.get_ee_rotation(self.ee_rot.clone())));
+        let q_rel = if q_rel[0] < 0.0 {
+            [-q_rel[0], -q_rel[1], -q_rel[2], -q_rel[3]]
+        } else {
+            q_rel
+        };
+
+        let w = q_rel[0].clamp(-1.0, 1.0);
+        let angle = 2.0 * w.acos();
+    
+        // Small-angle handling
+        if angle.abs() < 1e-6 {
+            self.ee_rot_vel = vec![0.0; 3];
+        }
+        else {
+            let sin_half_angle = (1.0 - w * w).sqrt();
+            
+            let axis = if sin_half_angle < 1e-6 {
+                [1.0, 0.0, 0.0]
+            } else {
+                [
+                    q_rel[1] / sin_half_angle,
+                    q_rel[2] / sin_half_angle,
+                    q_rel[3] / sin_half_angle,
+                ]
+            };
+        
+            let omega_mag = angle / time_delta;
+        
+            self.ee_rot_vel = vec![
+                axis[0] * omega_mag,
+                axis[1] * omega_mag,
+                axis[2] * omega_mag,
+            ];
+        }
     }
 
     pub fn update_pose_twist(&mut self) {
@@ -198,7 +265,11 @@ impl So100FwdKinematics {
 
         let r = Mat3::new([[r11, r12, r13], [r21, r22, r23], [r31, r32, r33]]);
 
+        let quat = self.get_ee_rotation(r.clone());
+        self.compute_ee_velocities(pos.clone(), quat);
+        
         self.ee_position = pos;
         self.ee_rot = r;
+        
     }
 }

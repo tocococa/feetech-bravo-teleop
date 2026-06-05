@@ -7,3 +7,4 @@ pub use feetech_driver::utils;
 mod kinematics;
 pub use kinematics::forward::So100FwdKinematics;
 pub use kinematics::inverse::Bravo7InvKinematics;
+pub use kinematics::inverse::BravoTwist;
