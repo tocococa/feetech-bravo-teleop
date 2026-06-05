@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use zmq;
+
 use clap::Parser;
 use serde::Deserialize;
 
@@ -24,15 +26,17 @@ struct Cli {
     port: String,
     #[arg(short, long, default_value = "false")]
     debug: bool,
+    #[arg(short, long, default_value = "5555")]
+    tcp_port: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct JointCalibration {
     id: u8,
-    drive_mode: u8,
+    //drive_mode: u8, available but unused
     homing_offset: i32,
-    range_min: i32,
-    range_max: i32,
+    //range_min: i32,
+    //range_max: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -82,11 +86,31 @@ fn main() {
     })
     .expect("Error setting Ctrl-C handler");
 
+    if cli.debug {
+        println!("ZeroMQ server will start in tcp://localhost:{}", cli.tcp_port)
+    }
+
+    let context = zmq::Context::new();
+    // socket type has different state machines
+    let responder = context.socket(zmq::REP).unwrap();
+
+    assert!(responder.bind(&format!("tcp://*:{}", cli.tcp_port)).is_ok());
+
     let mut servo_positions: Vec<u16> = [0; 6].to_vec();
     let mut teleop_input = Driver::new(&cli.port);
 
     let mut recenter = true;
     let mut fwd_kinematics = So100FwdKinematics::new();
+
+    // let mut bravo_seven_ref_ee_pos: Vec<f32> = [0.0; 3].to_vec();
+    // let mut bravo_seven_ref_ee_quat: Vec<f32> = [0.0; 4].to_vec();
+    let mut msg = zmq::Message::new();
+
+    responder.recv(&mut msg, 0).unwrap();
+    println!("Received {}", msg.as_str().unwrap());
+    responder.send("TEST", 0).unwrap();    
+    
+    
     while running.load(std::sync::atomic::Ordering::SeqCst) {
         for motor_id in 1u8..=6u8 {
             servo_positions[(motor_id - 1) as usize] =
@@ -108,17 +132,17 @@ fn main() {
             recenter = false; // this will later depend on keyboard input
         }
 
-        if cli.debug {
-            println!("Current Servo Angles (rads):");
-            for (servo_id, joint_info) in &servo_states {
-                println!("{}: {:.4}", servo_id, joint_info.current_rads);
-            }
-            let ee_pos = fwd_kinematics.get_ee_position();
-            println!("Current end effector position:");
-            println!("x: {}, y: {}, z: {}", ee_pos[0], ee_pos[1], ee_pos[2]);
-            let ee_quat = fwd_kinematics.get_ee_rotation();
-            println!("Current end effector rotation (quaternion):");
-            println!("w: {}, x: {}, y: {}, z: {}", ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]);
-        }
+        // if cli.debug {
+        //     println!("Current Servo Angles (rads):");
+        //     for (servo_id, joint_info) in &servo_states {
+        //         println!("{}: {:.4}", servo_id, joint_info.current_rads);
+        //     }
+        //     let ee_pos = fwd_kinematics.get_ee_position();
+        //     println!("Current end effector position:");
+        //     println!("x: {}, y: {}, z: {}", ee_pos[0], ee_pos[1], ee_pos[2]);
+        //     let ee_quat = fwd_kinematics.get_ee_rotation();
+        //     println!("Current end effector rotation (quaternion):");
+        //     println!("w: {}, x: {}, y: {}, z: {}", ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]);
+        // }
     }
 }

@@ -11,7 +11,7 @@ impl Bravo7InvKinematics {
         // Solve inverse kinematics using SVD-based damped pseudo-inverse
         // with adaptive damping. (Should) handle singularities by scaling
         // damping based on singular values.
-        // TODO: finish implementation
+        // TODO: finish implementation, need Gyang for the Jacobian and SVD
         let theta1 = y.atan2(x);
         let theta2 = (x * x + y * y).sqrt();
 
