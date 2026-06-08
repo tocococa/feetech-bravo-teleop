@@ -8,13 +8,13 @@ pub struct Bravo7InvKinematics {
 }
 
 
-type XYZ = Vec<f32>;
+type XYZ = Vec<f64>;
 
 #[derive(Debug, Deserialize)]
 pub struct Twist {
-    pose: XYZ,
-    quat: Quaternion,
-    sample_rate: Hz
+    pub pose: XYZ,
+    pub  quat: Quaternion,
+    pub sample_rate: Hz
 }
 
 impl Bravo7InvKinematics {

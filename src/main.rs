@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-// use std::time::{Instant, Duration};
-// use std::thread::sleep;
 
 use zmq;
 
@@ -11,13 +9,10 @@ use serde::Deserialize;
 
 use feetech_bravo_teleop::{
     Driver, ReadCommand::CurrentPosition, So100FwdKinematics,
-    Twist
+    Twist, integrate_first_order
 };
 
 use feetech_bravo_teleop::utils::step_to_rads;
-
-type Seconds = u64;
-const MOVE_TIME: Seconds = 1 / 60; // sampling at 60 Hz
 
 #[derive(Parser, Debug)]
 #[command(
@@ -43,8 +38,8 @@ struct JointCalibration {
     id: u8,
     //drive_mode: u8, available but unused
     homing_offset: i32,
-    //range_min: i32,
-    //range_max: i32,
+    //range_min: i32, ==
+    //range_max: i32, ==
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,7 +51,7 @@ struct JointState {
     current_rads: f32,
 }
 
-fn update_leader_state(
+fn update_leader_state_serial_read(
     teleop_input: &mut Driver,
     fwd_kinematics: &mut So100FwdKinematics,
     servo_calib: &HashMap<String, JointCalibration>,
@@ -145,21 +140,27 @@ fn main() {
             println!("Received data {:?}", bravo_twist);
         }
 
-        let servo_states = update_leader_state(
+        let servo_states = update_leader_state_serial_read(
             &mut teleop_input,
             &mut fwd_kinematics,
             &servo_calib,
             cli.debug
         );
 
+        fwd_kinematics.compute_ee_velocities(bravo_twist.sample_rate);
+        let (xyz_vel, omega_rot) = fwd_kinematics.get_ee_velocities();
+
         if cli.debug {
-            println!("Current Servo Angles (rads):");
+            println!("[SO-100] Current Servo Angles (rads):");
             for (servo_id, joint_info) in &servo_states {
                 println!("{}: {:.4}", servo_id, joint_info.current_rads);
             }
             let ee_pos = fwd_kinematics.get_ee_position();
-            println!("Current end effector position:");
+            println!("[SO-100] Current end effector position:");
             println!("x: {:?}, y: {:?}, z: {:?}", ee_pos[0], ee_pos[1], ee_pos[2]);
+            println!("[SO-100] Current ee velocities");
+            println!("x: {:?}, y: {:?}, z: {:?} [?/s]", xyz_vel[0], xyz_vel[1], xyz_vel[2]);
+            println!("w_1: {:?}, w_2: {:?}, w_3: {:?} [?/s]", omega_rot[0], omega_rot[1], omega_rot[2]);
         }
 
         if recenter {
@@ -167,10 +168,27 @@ fn main() {
             recenter = false; // this will later depend on keyboard input
         }
 
+        let dt = 1.0 / bravo_twist.sample_rate;
+
+        let next_pos: [f64; 3] = [
+            dt * xyz_vel[0] + bravo_twist.pose[0],
+            dt * xyz_vel[1] + bravo_twist.pose[1],
+            dt * xyz_vel[2] + bravo_twist.pose[2],
+        ];
+        
+        let next_euler = integrate_first_order(&bravo_twist.quat, &omega_rot, dt);
+
+        if cli.debug {
+            println!("[Bravo7] New target pose:");
+            if let [w, x, y, z] = &next_euler[..] {
+                println!("w: {:?}, x: {:?}, y: {:?}, z: {:?}", w, x, y, z);
+            }
+            if let [x, y, z] = &next_pos[..] {
+                println!("x: {:?}, y: {:?}, z: {:?}", x, y, z);
+            }
+        }
         
         responder.send("TEST", 0).unwrap();
-
-        
 
     }
 }
