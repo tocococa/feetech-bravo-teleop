@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+// use std::time::{Instant, Duration};
+// use std::thread::sleep;
 
 use zmq;
 
@@ -9,10 +11,13 @@ use serde::Deserialize;
 
 use feetech_bravo_teleop::{
     Driver, ReadCommand::CurrentPosition, So100FwdKinematics,
-    BravoTwist
+    Twist
 };
 
 use feetech_bravo_teleop::utils::step_to_rads;
+
+type Seconds = u64;
+const MOVE_TIME: Seconds = 1 / 60; // sampling at 60 Hz
 
 #[derive(Parser, Debug)]
 #[command(
@@ -33,7 +38,7 @@ struct Cli {
     tcp_port: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct JointCalibration {
     id: u8,
     //drive_mode: u8, available but unused
@@ -51,6 +56,45 @@ struct JointState {
     current_rads: f32,
 }
 
+fn update_leader_state(
+    teleop_input: &mut Driver,
+    fwd_kinematics: &mut So100FwdKinematics,
+    servo_calib: &HashMap<String, JointCalibration>,
+    echo: bool
+) -> HashMap<u8, JointState> {
+    let mut servo_positions: Vec<u16> = [0; 6].to_vec();
+    let mut servo_states: HashMap<u8, JointState> = servo_calib
+        .values()
+        .map(|calib| {
+            (
+                calib.id,
+                JointState {
+                    calibration: calib.clone(),
+                    current_step: 0,
+                    current_rads: 0.0,
+                },
+            )
+        })
+        .collect();
+    for motor_id in 1u8..=6u8 {
+        servo_positions[(motor_id - 1) as usize] =
+            teleop_input.read(motor_id, CurrentPosition).unwrap();
+        if let Some(servo_info) = servo_states.get_mut(&motor_id) {
+            servo_info.current_step = servo_positions[(motor_id - 1) as usize];
+            servo_info.current_rads = step_to_rads(
+                servo_info.current_step as i32,
+                servo_info.calibration.homing_offset,
+            );
+            fwd_kinematics.update_theta((motor_id - 1) as usize, servo_info.current_rads);
+        }
+    }
+    if echo {
+        println!("Servo states:\n{:?}", servo_states);
+    }
+    fwd_kinematics.update_pose_twist();
+    return servo_states;
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -63,23 +107,6 @@ fn main() {
         for (joint_name, joint_info) in &servo_calib {
             println!("Joint: {}, Info: {:?}", joint_name, joint_info);
         }
-    }
-
-    let mut servo_states: HashMap<u8, JointState> = servo_calib
-        .into_values()
-        .map(|calib| {
-            (
-                calib.id,
-                JointState {
-                    calibration: calib,
-                    current_step: 0,
-                    current_rads: 0.0,
-                },
-            )
-        })
-        .collect();
-    if cli.debug {
-        println!("Servo states:\n{:?}", servo_states);
     }
 
     let running = Arc::new(AtomicBool::new(true));
@@ -102,49 +129,48 @@ fn main() {
 
     assert!(responder.bind(&format!("tcp://*:{}", cli.tcp_port)).is_ok());
 
-    let mut servo_positions: Vec<u16> = [0; 6].to_vec();
     let mut teleop_input = Driver::new(&cli.port);
 
     let mut recenter = true;
     let mut fwd_kinematics = So100FwdKinematics::new();
+    // let mut delta: Seconds = 0;
 
     while running.load(std::sync::atomic::Ordering::SeqCst) {
+        // let start = Instant::now();
+
+        // this is a blocking call
         let msg = responder.recv_string(0).unwrap().unwrap(); // there must be a smarter way to do this
-        let bravo_twist: BravoTwist = serde_json::from_str(&msg).expect("Failed to parse ee twist");
-        
-        for motor_id in 1u8..=6u8 {
-            servo_positions[(motor_id - 1) as usize] =
-                teleop_input.read(motor_id, CurrentPosition).unwrap();
-            if let Some(servo_info) = servo_states.get_mut(&motor_id) {
-                servo_info.current_step = servo_positions[(motor_id - 1) as usize];
-                servo_info.current_rads = step_to_rads(
-                    servo_info.current_step as i32,
-                    servo_info.calibration.homing_offset,
-                );
-                fwd_kinematics.update_theta((motor_id - 1) as usize, servo_info.current_rads);
-            }
+        let bravo_twist: Twist = serde_json::from_str(&msg).expect("Failed to parse ee twist");
+        if cli.debug {
+            println!("Received data {:?}", bravo_twist);
         }
-        fwd_kinematics.update_pose_twist();
+
+        let servo_states = update_leader_state(
+            &mut teleop_input,
+            &mut fwd_kinematics,
+            &servo_calib,
+            cli.debug
+        );
+
+        if cli.debug {
+            println!("Current Servo Angles (rads):");
+            for (servo_id, joint_info) in &servo_states {
+                println!("{}: {:.4}", servo_id, joint_info.current_rads);
+            }
+            let ee_pos = fwd_kinematics.get_ee_position();
+            println!("Current end effector position:");
+            println!("x: {:?}, y: {:?}, z: {:?}", ee_pos[0], ee_pos[1], ee_pos[2]);
+        }
 
         if recenter {
             fwd_kinematics.re_center_ref();
             recenter = false; // this will later depend on keyboard input
-        } else {
-            
         }
+
+        
         responder.send("TEST", 0).unwrap();
 
-        // if cli.debug {
-        //     println!("Current Servo Angles (rads):");
-        //     for (servo_id, joint_info) in &servo_states {
-        //         println!("{}: {:.4}", servo_id, joint_info.current_rads);
-        //     }
-        //     let ee_pos = fwd_kinematics.get_ee_position();
-        //     println!("Current end effector position:");
-        //     println!("x: {}, y: {}, z: {}", ee_pos[0], ee_pos[1], ee_pos[2]);
-        //     let ee_quat = fwd_kinematics.get_ee_rotation();
-        //     println!("Current end effector rotation (quaternion):");
-        //     println!("w: {}, x: {}, y: {}, z: {}", ee_quat[0], ee_quat[1], ee_quat[2], ee_quat[3]);
-        // }
+        
+
     }
 }

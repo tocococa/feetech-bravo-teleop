@@ -1,17 +1,21 @@
-use std::f32::consts::PI;
-use std::time::{Instant};
+use std::f64::consts::PI;
+
+use crate::kinematics::utils::{
+    Quaternion, Hz
+};
 
 // as of May 2026, RFC #3681 "default_field_values" does not
 // allow for default values for vectors, so we still need to use imp::Default
 // for the SO-100 arm, we need a struct and then an implementation
 // that loads the DH params into it
 
+#[derive(Clone, Copy)]
 struct Mat3 {
-    data: [[f32; 3]; 3],
+    data: [[f64; 3]; 3],
 }
 
 impl Mat3 {
-    pub fn new(data: [[f32; 3]; 3]) -> Self {
+    pub fn new(data: [[f64; 3]; 3]) -> Self {
         Self { data }
     }
     fn transpose(&self) -> Self {
@@ -46,10 +50,10 @@ impl Mat3 {
 }
 
 struct DHParams {
-    a: Vec<f32>,
-    alpha: Vec<f32>,
-    d: Vec<f32>,
-    theta_offset: Vec<f32>,
+    a: Vec<f64>,
+    alpha: Vec<f64>,
+    d: Vec<f64>,
+    theta_offset: Vec<f64>,
 }
 
 impl Default for DHParams {
@@ -63,11 +67,11 @@ impl Default for DHParams {
     }
 }
 
-fn quat_conjugate(q: &[f32]) -> [f32; 4] {
+fn quat_conjugate(q: &[f64]) -> [f64; 4] {
     [q[0], -q[1], -q[2], -q[3]]
 }
 
-fn quat_multiply(a: &[f32], b: &[f32]) -> [f32; 4] {
+fn quat_multiply(a: &[f64], b: &[f64]) -> [f64; 4] {
     [
         a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
         a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
@@ -76,18 +80,41 @@ fn quat_multiply(a: &[f32], b: &[f32]) -> [f32; 4] {
     ]
 }
 
-type Quaternion = Vec<f32>;
+#[derive(Clone)]
+struct LastTwo<T> {
+    prev: Option<T>,
+    last: Option<T>,
+}
+
+impl<T> LastTwo<T> {
+    fn new() -> Self {
+        Self { prev: None, last: None }
+    }
+    fn push(&mut self, value: T) {
+        self.prev = self.last.take();
+        self.last = Some(value);
+    }
+    fn last(&self) -> Option<&T> {
+        self.last.as_ref()
+    }
+    fn prev(&self) -> Option<&T> {
+        self.prev.as_ref()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.last.is_none() || self.prev.is_none()
+    }
+}
 
 pub struct So100FwdKinematics {
-    joint_thetas: Vec<f32>,
-    ee_rot: Mat3,
-    ee_position: Vec<f32>,
+    joint_thetas: Vec<f64>,
     ee_rot_ref: Mat3,
-    ee_pos_ref: Vec<f32>,
+    ee_rot: LastTwo<Mat3>,
+    ee_position: LastTwo<Vec<f64>>,
+    ee_pos_ref: Vec<f64>,
     params: DHParams,
-    last_update: Instant,
+    update_freq: Hz,
     ee_rot_vel: Quaternion,
-    ee_pos_vel: Vec<f32>,
+    ee_pos_vel: Vec<f64>,
 }
 
 const SERVO_NUM: usize = 6;
@@ -96,26 +123,30 @@ impl So100FwdKinematics {
     pub fn new() -> Self {
         Self {
             joint_thetas: vec![0.0; SERVO_NUM],
-            ee_rot: Mat3::new([[0.0; 3]; 3]),
-            ee_position: Vec::with_capacity(3),
+            ee_rot: LastTwo::new(),
+            ee_position: LastTwo::new(),
             ee_rot_ref: Mat3::new([[0.0; 3]; 3]),
             ee_pos_ref: vec![0.0; 3],
             params: DHParams::default(),
             ee_rot_vel: Vec::with_capacity(4),
             ee_pos_vel: Vec::with_capacity(3),
-            last_update: Instant::now()
+            update_freq: 60.0
         }
     }
 
-    pub fn get_ee_position(&self) -> Vec<f32> {
+    pub fn get_ee_position(&self) -> Vec<f64> {
         let mut pos = Vec::with_capacity(3);
         for i in 0..3 {
-            pos.push(self.ee_position[i] - self.ee_pos_ref[i]);
+            let elem = self.ee_position
+                       .last()
+                       .and_then(|v| v.get(i))
+                       .map(|x| x - self.ee_pos_ref[i]);
+            pos.push(elem.unwrap());
         }
         pos
     }
 
-    fn get_ee_rotation(&self, rot: Mat3) -> Vec<f32> {
+    fn compute_ee_rotation(&self, rot: Mat3) -> Quaternion {
         let r_rel = rot.transpose().mul(&self.ee_rot_ref);
         // convert rotation to quaternion
         let trace = r_rel.data[0][0] + r_rel.data[1][1] + r_rel.data[2][2];
@@ -151,28 +182,32 @@ impl So100FwdKinematics {
     }
 
     pub fn re_center_ref(&mut self) {
-        self.ee_rot_ref = self.ee_rot.clone();
-        self.ee_pos_ref = self.ee_position.clone();
+        self.ee_rot_ref  = self.ee_rot.last().expect("ee_rot is empty").clone();
+        self.ee_pos_ref = self.ee_position.last().expect("ee_position is empty").clone();
         self.ee_rot_vel.clear();
         self.ee_pos_vel.clear();
-        self.last_update = Instant::now();
     }
 
     pub fn update_theta(&mut self, joint_id: usize, joint_theta: f32) {
-        self.joint_thetas[joint_id] = joint_theta;
+        self.joint_thetas[joint_id] = joint_theta as f64;
     }
 
-    fn compute_ee_velocities(&mut self, new_pos: Vec<f32>, new_quat: Vec<f32>) {
-        let time_delta = self.last_update.elapsed().as_secs() as f32;
+    fn compute_ee_velocities(&mut self) {
+        let time_delta = 1.0 / self.update_freq;
         if self.ee_position.is_empty() || self.ee_rot.is_empty() {
             return;
         }
-        let x_vel = (new_pos[0] - self.ee_position[0]) / time_delta;
-        let y_vel = (new_pos[1] - self.ee_position[1]) / time_delta;
-        let z_vel = (new_pos[2] - self.ee_position[2]) / time_delta;
+        let last_ee_pos = self.ee_position.last().expect("ee_pos last is empty").clone();
+        let prev_ee_pos = self.ee_position.prev().expect("ee_pos prev is empty").clone();
+        let x_vel = (last_ee_pos[0] - prev_ee_pos[0]) / time_delta;
+        let y_vel = (last_ee_pos[1] - prev_ee_pos[1]) / time_delta;
+        let z_vel = (last_ee_pos[2] - prev_ee_pos[2]) / time_delta;
         self.ee_pos_vel = vec![x_vel, y_vel, z_vel];
 
-        let q_rel = quat_multiply(&new_quat, &quat_conjugate(&self.get_ee_rotation(self.ee_rot.clone())));
+        let last_rot = self.ee_rot.last().expect("ee_rot last is empty").clone();
+        let prev_rot = self.ee_rot.prev().expect("ee_rot prev is empty").clone();
+        
+        let q_rel = quat_multiply(&self.compute_ee_rotation(last_rot), &quat_conjugate(&self.compute_ee_rotation(prev_rot)));
         let q_rel = if q_rel[0] < 0.0 {
             [-q_rel[0], -q_rel[1], -q_rel[2], -q_rel[3]]
         } else {
@@ -273,14 +308,13 @@ impl So100FwdKinematics {
 
         let r = Mat3::new([[r11, r12, r13], [r21, r22, r23], [r31, r32, r33]]);
 
-        let quat = self.get_ee_rotation(r.clone());
+        let quat = self.compute_ee_rotation(r.clone());
         if !pos.is_empty() && !quat.is_empty() {
-            self.compute_ee_velocities(pos.clone(), quat);
+            self.compute_ee_velocities();
         }
         
-        
-        self.ee_position = pos;
-        self.ee_rot = r;
+        self.ee_position.push(pos);
+        self.ee_rot.push(r);
         
     }
 }
