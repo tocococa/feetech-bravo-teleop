@@ -15,8 +15,6 @@ The driver will publish velocity commands as `/bravo_7_teleop/joint_velocity_com
 ## Prerequisites
 
 - Rust toolchain (stable): `$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- ROS2 (Humble or later): Follow the official ROS2 installation guide for your platform: https://docs.ros.org/en/humble/Installation.html
-- libudev (for Rust serial library): `$ sudo apt update && sudo apt install libudev-dev pkg-config`
 - LeRobot drivers, to generate the calibration file, or go with the default calibration file provided in this repo, see [Installation](https://huggingface.co/docs/lerobot/installation) and [Teleop-calibration](https://huggingface.co/docs/lerobot/il_robots#teleoperate) for details.
 
 ## References
