@@ -5,7 +5,9 @@ use std::sync::atomic::AtomicBool;
 use zmq;
 
 use clap::Parser;
-use serde::Deserialize;
+use serde::{
+    Deserialize, Serialize
+};
 
 use feetech_bravo_teleop::{
     Driver, ReadCommand::CurrentPosition, So100FwdKinematics, Twist, integrate_first_order,
@@ -48,6 +50,12 @@ struct JointState {
     current_step: u16,
     #[serde(default)]
     current_rads: f32,
+}
+
+#[derive(Serialize)]
+struct PoseMessage {
+    pose: [f64; 3],
+    quat: [f64; 4],
 }
 
 fn update_leader_state_serial_read(
@@ -190,6 +198,14 @@ fn main() {
             }
         }
 
-        responder.send("TEST", 0).unwrap();
+        if let [w, x, y, z] = next_euler[..] {
+            let msg = PoseMessage {
+                pose: next_pos,
+                quat: [w, x, y, z]
+            };
+            let json = serde_json::to_string(&msg).unwrap();
+            responder.send(json.into_bytes(), 0).unwrap();
+        }
+
     }
 }
