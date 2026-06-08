@@ -8,8 +8,7 @@ use clap::Parser;
 use serde::Deserialize;
 
 use feetech_bravo_teleop::{
-    Driver, ReadCommand::CurrentPosition, So100FwdKinematics,
-    Twist, integrate_first_order
+    Driver, ReadCommand::CurrentPosition, So100FwdKinematics, Twist, integrate_first_order,
 };
 
 use feetech_bravo_teleop::utils::step_to_rads;
@@ -55,7 +54,7 @@ fn update_leader_state_serial_read(
     teleop_input: &mut Driver,
     fwd_kinematics: &mut So100FwdKinematics,
     servo_calib: &HashMap<String, JointCalibration>,
-    echo: bool
+    echo: bool,
 ) -> HashMap<u8, JointState> {
     let mut servo_positions: Vec<u16> = [0; 6].to_vec();
     let mut servo_states: HashMap<u8, JointState> = servo_calib
@@ -128,11 +127,8 @@ fn main() {
 
     let mut recenter = true;
     let mut fwd_kinematics = So100FwdKinematics::new();
-    // let mut delta: Seconds = 0;
 
     while running.load(std::sync::atomic::Ordering::SeqCst) {
-        // let start = Instant::now();
-
         // this is a blocking call
         let msg = responder.recv_string(0).unwrap().unwrap(); // there must be a smarter way to do this
         let bravo_twist: Twist = serde_json::from_str(&msg).expect("Failed to parse ee twist");
@@ -144,7 +140,7 @@ fn main() {
             &mut teleop_input,
             &mut fwd_kinematics,
             &servo_calib,
-            cli.debug
+            cli.debug,
         );
 
         fwd_kinematics.compute_ee_velocities(bravo_twist.sample_rate);
@@ -159,8 +155,14 @@ fn main() {
             println!("[SO-100] Current end effector position:");
             println!("x: {:?}, y: {:?}, z: {:?}", ee_pos[0], ee_pos[1], ee_pos[2]);
             println!("[SO-100] Current ee velocities");
-            println!("x: {:?}, y: {:?}, z: {:?} [?/s]", xyz_vel[0], xyz_vel[1], xyz_vel[2]);
-            println!("w_1: {:?}, w_2: {:?}, w_3: {:?} [?/s]", omega_rot[0], omega_rot[1], omega_rot[2]);
+            println!(
+                "x: {:?}, y: {:?}, z: {:?} [?/s]",
+                xyz_vel[0], xyz_vel[1], xyz_vel[2]
+            );
+            println!(
+                "w_1: {:?}, w_2: {:?}, w_3: {:?} [?/s]",
+                omega_rot[0], omega_rot[1], omega_rot[2]
+            );
         }
 
         if recenter {
@@ -175,7 +177,7 @@ fn main() {
             dt * xyz_vel[1] + bravo_twist.pose[1],
             dt * xyz_vel[2] + bravo_twist.pose[2],
         ];
-        
+
         let next_euler = integrate_first_order(&bravo_twist.quat, &omega_rot, dt);
 
         if cli.debug {
@@ -187,8 +189,7 @@ fn main() {
                 println!("x: {:?}, y: {:?}, z: {:?}", x, y, z);
             }
         }
-        
-        responder.send("TEST", 0).unwrap();
 
+        responder.send("TEST", 0).unwrap();
     }
 }
