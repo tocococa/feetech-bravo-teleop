@@ -1,10 +1,16 @@
-// move Mat3 n things over here
-// move Quat n things over here
-
-//use std::ops::Add;
+use serde::Deserialize;
 
 pub type Quaternion = Vec<f64>;
 pub type Hz = f64;
+
+type XYZ = Vec<f64>;
+
+#[derive(Debug, Deserialize)]
+pub struct Twist {
+    pub pose: XYZ,
+    pub quat: Quaternion,
+    pub sample_rate: Hz,
+}
 
 pub fn quat_conjugate(q: Quaternion) -> Quaternion {
     vec![q[0], -q[1], -q[2], -q[3]]
